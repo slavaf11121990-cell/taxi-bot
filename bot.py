@@ -2,7 +2,6 @@ import os
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
 
-# Токен из переменных окружения BotHost
 TOKEN = os.environ.get('VK_TOKEN')
 
 vk_session = vk_api.VkApi(token=TOKEN)
@@ -17,6 +16,6 @@ for event in longpoll.listen():
         if text == 'привет':
             vk.messages.send(
                 user_id=event.user_id,
-                message='Привет! Я бот-диспетчер Такси ТИЗ.',
+                message='Привет! Я бот-диспетчер Такси ТИЗ (тест).',
                 random_id=0
             )
