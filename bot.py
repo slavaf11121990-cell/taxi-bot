@@ -8,12 +8,12 @@ vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkLongPoll(vk_session)
 vk = vk_session.get_api()
 
-print("Бот запущен и слушает сообщения...")
+print("Бот запущен...")
 
 for event in longpoll.listen():
     if event.type == VkEventType.MESSAGE_NEW and event.to_me:
         text = event.text.lower()
-        if text == 'привет':
+        if 'привет' in text:
             vk.messages.send(
                 user_id=event.user_id,
                 message='Привет! Я бот-диспетчер Такси ТИЗ (тест).',
