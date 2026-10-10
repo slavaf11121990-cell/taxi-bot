@@ -38,3 +38,10 @@ for event in longpoll.listen():
                 message='Ты нажал "Я водитель".',
                 random_id=0
             )
+if text == 'начать' or text == 'start':
+    vk.messages.send(
+        user_id=user_id,
+        message='Выберите, кто вы:',
+        keyboard=keyboard.get_keyboard(),
+        random_id=0
+    )
