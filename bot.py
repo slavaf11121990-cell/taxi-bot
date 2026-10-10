@@ -4,7 +4,7 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 TOKEN = os.environ.get('VK_TOKEN')
-ADMIN_ID = 572959468 # <-- ТВОЙ ID ВК (замени, если другой)
+ADMIN_ID = 572959468
 
 vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkLongPoll(vk_session)
@@ -34,75 +34,45 @@ def seats_kb():
     kb.add_button('2')
     kb.add_button('3')
     kb.add_button('4')
-    kb.add_button('Седан')
-    kb.add_button('Минивэн')
     return kb.get_keyboard()
 
 for event in longpoll.listen():
     if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-        text = event.text.lower()
+        text = event.text.lower().strip()
         user_id = event.user_id
 
         if text in ['начать', 'start', 'привет']:
             users[user_id] = {'stage': 'main'}
-            vk.messages.send(
-                user_id=user_id,
-                message='Здравствуйте! Это Такси ТИЗ. Выберите:',
-                keyboard=main_kb(),
-                random_id=0
-            )
+            vk.messages.send(user_id=user_id, message='Здравствуйте! Это Такси ТИЗ. Выберите:', keyboard=main_kb(), random_id=0)
 
         elif text == 'заказать поездку':
             users[user_id] = {'stage': 'otkuda'}
-            vk.messages.send(
-                user_id=user_id,
-                message='Откуда вы едете?',
-                keyboard=cities_kb(),
-                random_id=0
-            )
+            vk.messages.send(user_id=user_id, message='Откуда вы едете?', keyboard=cities_kb(), random_id=0)
 
-        elif user_id in users and users[user_id]['stage'] == 'otkuda':
-            users[user_id]['otkuda'] = text
-            users[user_id]['stage'] = 'kuda'
-            vk.messages.send(
-                user_id=user_id,
-                message='Куда вы едете?',
-                keyboard=cities_kb(),
-                random_id=0
-            )
+        elif text == 'я водитель':
+            vk.messages.send(user_id=user_id, message='Вы водитель. Введите номер телефона.', random_id=0)
 
-        elif user_id in users and users[user_id]['stage'] == 'kuda':
-            users[user_id]['kuda'] = text
-            users[user_id]['stage'] = 'mesta'
-            vk.messages.send(
-                user_id=user_id,
-                message='Сколько вас?',
-                keyboard=seats_kb(),
-                random_id=0
-            )
+        elif user_id in users:
+            stage = users[user_id].get('stage')
 
-        elif user_id in users and users[user_id]['stage'] == 'mesta':
-            users[user_id]['mesta'] = text
-            users[user_id]['stage'] = 'phone'
-            vk.messages.send(
-                user_id=user_id,
-                message='Введите ваш номер телефона:',
-                random_id=0
-            )
+            if stage == 'otkuda':
+                users[user_id]['otkuda'] = text
+                users[user_id]['stage'] = 'kuda'
+                vk.messages.send(user_id=user_id, message='Куда вы едете?', keyboard=cities_kb(), random_id=0)
 
-        elif user_id in users and users[user_id]['stage'] == 'phone':
-            users[user_id]['phone'] = text
-            users[user_id]['stage'] = 'done'
+            elif stage == 'kuda':
+                users[user_id]['kuda'] = text
+                users[user_id]['stage'] = 'mesta'
+                vk.messages.send(user_id=user_id, message='Сколько вас?', keyboard=seats_kb(), random_id=0)
 
-            vk.messages.send(
-                user_id=user_id,
-                message='Спасибо! Ваш заказ принят. Ожидайте звонка водителя.',
-                random_id=0
-            )
+            elif stage == 'mesta':
+                users[user_id]['mesta'] = text
+                users[user_id]['stage'] = 'phone'
+                vk.messages.send(user_id=user_id, message='Введите ваш номер телефона:', random_id=0)
 
-            order = users[user_id]
-            vk.messages.send(
-                user_id=ADMIN_ID,
-                message=f"🚖 НОВЫЙ ЗАКАЗ\n\n📍 Откуда: {order['otkuda']}\n🎯 Куда: {order['kuda']}\n👥 Мест: {order['mesta']}\n📞 Телефон: {order['phone']}",
-                random_id=0
-            )
+            elif stage == 'phone':
+                users[user_id]['phone'] = text
+                users[user_id]['stage'] = 'done'
+                vk.messages.send(user_id=user_id, message='Спасибо! Заказ принят.', random_id=0)
+                order = users[user_id]
+                vk.messages.send(user_id=ADMIN_ID, message=f"🚖 НОВЫЙ ЗАКАЗ\n\n📍 Откуда: {order['otkuda']}\n🎯 Куда: {order['kuda']}\n👥 Мест: {order['mesta']}\n📞 Телефон: {order['phone']}", random_id=0)
