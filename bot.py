@@ -251,13 +251,19 @@ def handle_message(user_id, text, payload):
         send_msg(user_id, "Куда вы едете?", cities_kb())
 
     elif step == 'get_to':
-        if text not in CITIES:
-            send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
-            conn.close()
-            return
-        cursor.execute("UPDATE passengers SET point_to=?, step='get_seats' WHERE user_id=?", (text, user_id))
-        conn.commit()
-        send_msg(user_id, "Сколько вас поедет?\nЕсли хотите заказать машину целиком — нажмите «Легковое такси» или «Минивэн».", seats_kb())
+    if text not in CITIES:
+        send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
+        conn.close()
+        return
+    cursor.execute("SELECT point_from FROM passengers WHERE user_id=?", (user_id,))
+    from_city = cursor.fetchone()[0]
+    if text == from_city:
+        send_msg(user_id, f"❌ Откуда и куда не могут совпадать. Вы уже едете из «{from_city}». Выберите другой город:", cities_kb())
+        conn.close()
+        return
+    cursor.execute("UPDATE passengers SET point_to=?, step='get_seats' WHERE user_id=?", (text, user_id))
+    conn.commit()
+    send_msg(user_id, "Сколько вас поедет?\nЕсли хотите заказать машину целиком — нажмите «Легковое такси» или «Минивэн».", seats_kb())
 
     elif step == 'get_seats':
         if text not in SEATS:
