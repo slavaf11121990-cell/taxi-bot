@@ -17,19 +17,17 @@ vk = vk_session.get_api()
 longpoll = VkBotLongPoll(vk_session, GROUP_ID)
 
 # ==========================================
-# СОЗДАНИЕ БАЗЫ ДАННЫХ (БЛОКНОТА СЕРВЕРА)
+# СОЗДАНИЕ БАЗЫ ДАННЫХ
 # ==========================================
 def init_db():
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
-    # Таблица водителей
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS drivers (
             user_id INTEGER PRIMARY KEY,
             phone TEXT
         )
     """)
-    # Таблица пассажиров (состояние опроса)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS passengers (
             user_id INTEGER PRIMARY KEY,
@@ -40,7 +38,6 @@ def init_db():
             phone TEXT
         )
     """)
-    # Таблица активных заказов
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             order_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +59,6 @@ init_db()
 # ШАБЛОНЫ КНОПОК (КЛАВИАТУРЫ)
 # ==========================================
 
-# Главное меню
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("🚕 Заказать такси", color=VkKeyboardColor.PRIMARY)
@@ -70,7 +66,6 @@ def get_main_keyboard():
     keyboard.add_button("🚗 Я водитель", color=VkKeyboardColor.GREEN)
     return keyboard.get_keyboard()
 
-# Выбор городов
 def get_cities_keyboard():
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("Сибай", color=VkKeyboardColor.SECONDARY)
@@ -80,50 +75,37 @@ def get_cities_keyboard():
     keyboard.add_button("Екатеринбург", color=VkKeyboardColor.SECONDARY)
     return keyboard.get_keyboard()
 
-# Выбор мест (Исправлено: разделено на 2 строки, максимум 5 кнопок в ряд!)
 def get_seats_keyboard():
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("1 ЧЕЛ", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("2 ЧЕЛ", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("3 ЧЕЛ", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("4 ЧЕЛ", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_line() # Перенос на новую строку
+    keyboard.add_line()
     keyboard.add_button("СЕДАН", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("МИНИВЭН", color=VkKeyboardColor.PRIMARY)
     return keyboard.get_keyboard()
 
-# Подтверждение номера
 def get_confirm_keyboard():
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("✅ НОМЕР ВЕРНЫЙ", color=VkKeyboardColor.POSITIVE)
     return keyboard.get_keyboard()
 
-# Кнопка «ВЗЯТЬ ЗАКАЗ» для водителей (Инлайн-кнопка под сообщением)
 def get_take_order_keyboard(order_id):
     keyboard = VkKeyboard(one_time=False, inline=True)
     keyboard.add_button("🎯 ВЗЯТЬ ЗАКАЗ", color=VkKeyboardColor.POSITIVE, payload={"type": "take_order", "order_id": order_id})
     return keyboard.get_keyboard()
 
 # ==========================================
-# ЛОГИКА СВЯЗИ ПАССАЖИРОВ И ВОДИТЕЛЕЙ
+# ЛОГИКА БОТА
 # ==========================================
-
-def send_msg(user_id, text, keyboard=None):
-    vk.messages.send(
-        user_id=user_id,
-        message=text,
-        random_id=get_random_id(),
-        keyboard=keyboard
-    )
 
 def handle_message(user_id, text, payload):
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
     
-    # ПРОВЕРКА НАЖАТИЯ КНОПКИ ВОДИТЕЛЕМ
     if payload and payload.get("type") == "take_order":
         order_id = payload.get("order_id")
-        
         cursor.execute("SELECT passenger_id, point_from, point_to, phone, status, driver_id FROM orders WHERE order_id = ?", (order_id,))
         order = cursor.fetchone()
         
@@ -132,8 +114,6 @@ def handle_message(user_id, text, payload):
             if status == "active":
                 cursor.execute("UPDATE orders SET status = 'taken', driver_id = ? WHERE order_id = ?", (user_id, order_id))
                 conn.commit()
-                
-                # Водитель получает скрытый номер телефона пассажира!
                 send_msg(user_id, f"✅ Вы успешно взяли заказ №{order_id}!\n\n📍 Маршрут: {p_from} -> {p_to}\n📱 ТЕЛЕФОН КЛИЕНТА: {p_phone}\n\nСрочно свяжитесь с пассажиром!")
                 send_msg(p_id, "🚕 Водитель принял ваш заказ и уже связывается с вами по указанному телефону!")
             else:
@@ -144,7 +124,6 @@ def handle_message(user_id, text, payload):
         conn.close()
         return
 
-    # Получаем шаг пользователя
     cursor.execute("SELECT step FROM passengers WHERE user_id = ?", (user_id,))
     res = cursor.fetchone()
     current_step = res[0] if res else 'main_menu'
@@ -170,7 +149,6 @@ def handle_message(user_id, text, payload):
         conn.close()
         return
 
-    # Логика последовательного опроса пассажира
     if current_step == 'get_from':
         cursor.execute("UPDATE passengers SET point_from = ?, step = 'get_to' WHERE user_id = ?", (text, user_id))
         conn.commit()
@@ -197,7 +175,6 @@ def handle_message(user_id, text, payload):
         
         if p_data:
             p_from, p_to, p_seats, p_phone = p_data
-            
             cursor.execute("INSERT INTO orders (passenger_id, point_from, point_to, seats, phone, status) VALUES (?, ?, ?, ?, ?, 'active')", 
                            (user_id, p_from, p_to, p_seats, p_phone))
             order_id = cursor.lastrowid
@@ -205,14 +182,12 @@ def handle_message(user_id, text, payload):
             
             send_msg(user_id, "🎉 Спасибо! Ваш заказ отправлен всем свободным водителям. Ждите звонка!", get_main_keyboard())
             
-            # РАССЫЛКА ЗАРЕГИСТРИРОВАННЫМ ВОДИТЕЛЯМ
             cursor.execute("SELECT user_id FROM drivers")
             drivers = cursor.fetchall()
-            
             order_text = f"📢 НОВЫЙ ЗАКАЗ №{order_id}!\n\n📍 Откуда: {p_from}\n📍 Куда: {p_to}\n👥 Детали: {p_seats}\n\n⚠️ Номер телефона будет доступен после нажатия кнопки!"
             
             for driver in drivers:
-                if driver[0] != user_id: # Чтобы самому себе как пассажиру не спамить
+                if driver[0] != user_id:
                     try:
                         send_msg(driver[0], order_text, get_take_order_keyboard(order_id))
                     except:
@@ -223,11 +198,18 @@ def handle_message(user_id, text, payload):
 
     conn.close()
 
+def send_msg(user_id, text, keyboard=None):
+    vk.messages.send(
+        user_id=user_id,
+        message=text,
+        random_id=get_random_id(),
+        keyboard=keyboard
+    )
+
 # ==========================================
-# ГЛАВНЫЙ ЦИКЛ ОПРОСА СЕРВЕРА
+# ГЛАВНЫЙ ЦИКЛ
 # ==========================================
 if __name__ == "__main__":
-    print("Бот Диспетчерская Такси ТИЗ успешно запущен без ошибок!")
     for event in longpoll.listen():
         if event.type == VkBotEventType.MESSAGE_NEW:
             u_id = event.obj.message['from_id']
@@ -237,3 +219,5 @@ if __name__ == "__main__":
             if p_load and isinstance(p_load, str):
                 try: p_load = json.loads(p_load)
                 except: p_load = None
+                
+            handle_message(u_id, txt, p_load)
