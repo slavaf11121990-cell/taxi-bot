@@ -157,8 +157,16 @@ def handle_message(user_id, text, payload):
                 if status == "active":
                     cursor.execute("UPDATE orders SET status='taken', driver_id=? WHERE order_id=?", (user_id, oid))
                     conn.commit()
-                    send_msg(user_id, f"✅ Вы взяли заказ №{oid}!\n\n📍 {p_from} -> {p_to}\n📱 ТЕЛЕФОН: {p_phone}", driver_actions_kb(oid))
-                    send_msg(p_id, "🚕 Водитель принял заказ! Ожидайте звонка.", passenger_actions_kb(oid))
+                    send_msg(user_id,
+                             f"✅ Вы взяли заказ №{oid}!\n\n"
+                             f"📍 {p_from} -> {p_to}\n"
+                             f"📱 ТЕЛЕФОН: {p_phone}\n\n"
+                             f"⚠️ Позвоните пассажиру в течение 10 минут!",
+                             driver_actions_kb(oid))
+                    send_msg(p_id,
+                             "🚕 Водитель принял заказ! Ожидайте звонка в течение 10 минут. "
+                             "Если не позвонит — нажмите «⚠️ Водитель не позвонил».",
+                             passenger_actions_kb(oid))
                 elif cur_drv == user_id:
                     send_msg(user_id, "Вы уже взяли этот заказ.")
                 else:
