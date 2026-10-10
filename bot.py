@@ -160,29 +160,33 @@ def handle_message(user_id, text, payload):
         conn.commit()
         send_msg(user_id, "ОТКУДА ВЫ ЕДЕТЕ?", get_cities_keyboard())
         
-    else:
-        step = user_step[0] if user_step else 'main_menu'
-        if step == 'get_from':
+   else:
+        # Берем чистую строку шага из базы данных
+        current_step = user_step[0] if user_step and isinstance(user_step, tuple) else user_step
+        if not current_step:
+            current_step = 'main_menu'
+
+        if current_step == 'get_from':
             cursor.execute("UPDATE passengers SET point_from = ?, step = 'get_to' WHERE user_id = ?", (text, user_id))
             conn.commit()
             send_msg(user_id, "КУДА ВЫ ЕДЕТЕ?", get_cities_keyboard())
             
-        elif step == 'get_to':
+        elif current_step == 'get_to':
             cursor.execute("UPDATE passengers SET point_to = ?, step = 'get_seats' WHERE user_id = ?", (text, user_id))
             conn.commit()
             send_msg(user_id, "СКОЛЬКО ВАС? ЕСЛИ НУЖНА ВСЯ МАШИНА, НАЖМИТЕ СЕДАН", get_seats_keyboard())
             
-        elif step == 'get_seats':
+        elif current_step == 'get_seats':
             cursor.execute("UPDATE passengers SET seats = ?, step = 'get_phone' WHERE user_id = ?", (text, user_id))
             conn.commit()
             send_msg(user_id, "ВВЕДИТЕ СВОЙ НОМЕР ТЕЛЕФОНА ДЛЯ СВЯЗИ (Можно ввести любой номер руками, например для бабушки):")
             
-        elif step == 'get_phone':
+        elif current_step == 'get_phone':
             cursor.execute("UPDATE passengers SET phone = ?, step = 'confirm_order' WHERE user_id = ?", (text, user_id))
             conn.commit()
             send_msg(user_id, f"Ваш номер: {text}\nВсё верно?", get_confirm_keyboard())
             
-        elif step == 'confirm_order' and text == "✅ НОМЕР ВЕРНЫЙ":
+        elif current_step == 'confirm_order' and text == "✅ НОМЕР ВЕРНЫЙ":
             cursor.execute("SELECT point_from, point_to, seats, phone FROM passengers WHERE user_id = ?", (user_id,))
             p_from, p_to, p_seats, p_phone = cursor.fetchone()
             
@@ -207,21 +211,3 @@ def handle_message(user_id, text, payload):
                     
             cursor.execute("UPDATE passengers SET step = 'main_menu' WHERE user_id = ?", (user_id,))
             conn.commit()
-
-    conn.close()
-
-# ==========================================
-# ГЛАВНЫЙ ЦИКЛ ОПРОСА
-# ==========================================
-print("Бот Диспетчерская Такси МИГ успешно запущен!")
-for event in longpoll.listen():
-    if event.type == VkBotEventType.MESSAGE_NEW:
-        u_id = event.obj.message['from_id']
-        txt = event.obj.message['text']
-        p_load = event.obj.message.get('payload')
-        
-        if p_load and isinstance(p_load, str):
-            try: p_load = json.loads(p_load)
-            except: p_load = None
-            
-        handle_message(u_id, txt, p_load)
