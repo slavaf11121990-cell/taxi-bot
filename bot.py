@@ -9,7 +9,7 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 # ==========================================
 # ПОДКЛЮЧЕНИЕ И НАСТРОЙКА
 # ==========================================
-TOKEN = "vk1.a.u5H-G56MAqzOhAwDFEfL1xurn457lPQ4UVh2rqO4xHfDdUcRsrDV1dYBjobxStNAV9m706l7N8z1njjuPQdQrMHS4xElBfzuba9V4yLS288w17bk5odDVdd7TDirNM6eCa5ujzHH7cM-Gv8McvRnllOspvquJaWyjTZEZ7qCR6asCvPaYB6vFoVDHNOiDmyySLeH0PAiLsKUxjaPpsNDMA"
+TOKEN = os.environ.get('VK_TOKEN')
 GROUP_ID = 241472407
 
 vk_session = VkApi(token=TOKEN)
@@ -63,7 +63,7 @@ def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("🚕 Заказать такси", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
-    keyboard.add_button("🚗 Я водитель", color=VkKeyboardColor.GREEN)
+    keyboard.add_button("🚗 Я водитель", color=VkKeyboardColor.POSITIVE)
     return keyboard.get_keyboard()
 
 def get_cities_keyboard():
@@ -128,7 +128,7 @@ def handle_message(user_id, text, payload):
     res = cursor.fetchone()
     current_step = res[0] if res else 'main_menu'
     
-    if text.lower() == "привет" or text.lower() == "старт":
+    if text.lower() in ["привет", "старт", "начать"]:
         cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'main_menu')", (user_id,))
         conn.commit()
         send_msg(user_id, "Здравствуйте! Это Такси ТИЗ. Выберите:", get_main_keyboard())
