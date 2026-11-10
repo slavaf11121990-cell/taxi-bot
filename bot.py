@@ -322,7 +322,7 @@ def handle_message(user_id, text, payload):
         p = cursor.fetchone()
         if p:
             p_from, p_to, p_seats, p_day, p_time, p_phone = p
-            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,'active')",
+            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,?,'active')",
                            (user_id, 'taxi', p_from, p_to, p_seats, p_day, p_time, p_phone))
             oid = cursor.lastrowid
             conn.commit()
