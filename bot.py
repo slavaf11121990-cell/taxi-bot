@@ -42,8 +42,9 @@ def init_db():
 
 init_db()
 
+# ВЕЗДЕ inline=True
 def main_kb():
-    kb = VkKeyboard(one_time=False)
+    kb = VkKeyboard(one_time=False, inline=True)
     kb.add_button("🚕 Заказать такси", color=VkKeyboardColor.PRIMARY)
     kb.add_line()
     kb.add_button("📦 Отправить посылку", color=VkKeyboardColor.SECONDARY)
@@ -52,7 +53,7 @@ def main_kb():
     return kb.get_keyboard()
 
 def cities_kb():
-    kb = VkKeyboard(one_time=False)
+    kb = VkKeyboard(one_time=False, inline=True)
     kb.add_button("Сибай", color=VkKeyboardColor.SECONDARY)
     kb.add_button("Магнитогорск", color=VkKeyboardColor.SECONDARY)
     kb.add_line()
@@ -61,7 +62,7 @@ def cities_kb():
     return kb.get_keyboard()
 
 def seats_kb():
-    kb = VkKeyboard(one_time=False)
+    kb = VkKeyboard(one_time=False, inline=True)
     kb.add_button("1 человек", color=VkKeyboardColor.SECONDARY)
     kb.add_button("2 человека", color=VkKeyboardColor.SECONDARY)
     kb.add_button("3 человека", color=VkKeyboardColor.SECONDARY)
@@ -77,7 +78,7 @@ def seats_kb():
     return kb.get_keyboard()
 
 def confirm_kb():
-    kb = VkKeyboard(one_time=False)
+    kb = VkKeyboard(one_time=False, inline=True)
     kb.add_button("✅ НОМЕР ВЕРНЫЙ", color=VkKeyboardColor.POSITIVE)
     return kb.get_keyboard()
 
@@ -228,35 +229,36 @@ def handle_message(user_id, text, payload):
     res = cursor.fetchone()
     step = res[0] if res else 'main_menu'
 
-    if text.lower() in ["привет", "старт", "начать"]:
+    text_lower = text.lower().strip()
+
+    if text_lower in ["привет", "старт", "начать"]:
         cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'main_menu')", (user_id,))
         conn.commit()
         send_msg(user_id, "Здравствуйте! Это Такси ТИЗ. Выберите:", main_kb())
         conn.close()
         return
 
-    if text == "🚗 Я водитель":
+    if text == "🚗 Я водитель" or text_lower in ["водитель", "я водитель"]:
         cursor.execute("INSERT OR REPLACE INTO drivers (user_id) VALUES (?)", (user_id,))
         conn.commit()
         send_msg(user_id, "✅ Вы зарегистрированы как водитель. Ожидайте заказы.", keyboard=None)
         conn.close()
         return
 
-    if text == "🚕 Заказать такси":
+    if text == "🚕 Заказать такси" or text_lower in ["такси", "заказать"]:
         cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'get_from')", (user_id,))
         conn.commit()
         send_msg(user_id, "Откуда вы едете?", cities_kb())
         conn.close()
         return
 
-    if text == "📦 Отправить посылку":
+    if text == "📦 Отправить посылку" or text_lower in ["посылка", "отправить посылку"]:
         cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'pkg_from')", (user_id,))
         conn.commit()
         send_msg(user_id, "Откуда отправить посылку?", cities_kb())
         conn.close()
         return
 
-    # === ВЕТКА ТАКСИ ===
     if step == 'get_from':
         if text not in CITIES:
             send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
@@ -331,7 +333,6 @@ def handle_message(user_id, text, payload):
         cursor.execute("UPDATE passengers SET step='main_menu' WHERE user_id=?", (user_id,))
         conn.commit()
 
-    # === ВЕТКА ПОСЫЛКИ ===
     elif step == 'pkg_from':
         if text not in CITIES:
             send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
@@ -396,7 +397,6 @@ def handle_message(user_id, text, payload):
         cursor.execute("UPDATE passengers SET step='main_menu' WHERE user_id=?", (user_id,))
         conn.commit()
 
-    # === ЖАЛОБА ===
     elif step == 'complaint':
         send_msg(ADMIN_ID, f"📩 ЖАЛОБА от {user_id}:\n\n{text}")
         send_msg(user_id, "✅ Спасибо! Жалоба отправлена администратору.", main_kb())
