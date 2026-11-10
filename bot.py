@@ -220,7 +220,7 @@ def handle_message(user_id, text, payload):
         if ptype == "complaint":
             cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'complaint')", (user_id,))
             conn.commit()
-            send_msg(user_id, "📩 Опишите проблему одним сообщением. Мы разберёмся.")
+            send_msg(user_id, "📩 Опишите проблему одним сообщением. Мы разберёмся.", keyboard=None)
             conn.close()
             return
 
@@ -238,7 +238,7 @@ def handle_message(user_id, text, payload):
     if text == "🚗 Я водитель":
         cursor.execute("INSERT OR REPLACE INTO drivers (user_id) VALUES (?)", (user_id,))
         conn.commit()
-        send_msg(user_id, "✅ Вы зарегистрированы как водитель. Ожидайте заказы.")
+        send_msg(user_id, "✅ Вы зарегистрированы как водитель. Ожидайте заказы.", keyboard=None)
         conn.close()
         return
 
@@ -288,21 +288,29 @@ def handle_message(user_id, text, payload):
             return
         cursor.execute("UPDATE passengers SET seats=?, step='get_day' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "КОГДА ВЫ ХОТИТЕ ПОЕХАТЬ?\nНапишите дату (например: 12.11.2026):")
+        send_msg(user_id, "КОГДА ВЫ ХОТИТЕ ПОЕХАТЬ?\nНапишите дату (например: 12.11.2026 или 12.11.26):", keyboard=None)
 
     elif step == 'get_day':
+        if not re.match(r'^\d{2}[\.\s\/]?\d{2}[\.\s\/]?\d{2,4}$', text.strip()):
+            send_msg(user_id, "❌ Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например: 12.11.2026):", keyboard=None)
+            conn.close()
+            return
         cursor.execute("UPDATE passengers SET day=?, step='get_time' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 04:55):")
+        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 09:00, 9.00 или 9 00):", keyboard=None)
 
     elif step == 'get_time':
+        if not re.match(r'^\d{1,2}[:.\s]\d{2}$', text.strip()):
+            send_msg(user_id, "❌ Пожалуйста, введите время в формате ЧЧ:ММ (например: 09:00):", keyboard=None)
+            conn.close()
+            return
         cursor.execute("UPDATE passengers SET time=?, step='get_phone' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА в формате +7XXXXXXXXXX или 8XXXXXXXXXX:")
+        send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА в формате +7XXXXXXXXXX или 8XXXXXXXXXX:", keyboard=None)
 
     elif step == 'get_phone':
         if not re.match(r'^(\+7|7|8)\d{10}$', text.replace(" ", "").replace("-", "")):
-            send_msg(user_id, "❌ Неверный формат. Введите номер: +7XXXXXXXXXX или 8XXXXXXXXXX")
+            send_msg(user_id, "❌ Неверный формат. Введите номер: +7XXXXXXXXXX или 8XXXXXXXXXX", keyboard=None)
             conn.close()
             return
         cursor.execute("UPDATE passengers SET phone=?, step='confirm_order' WHERE user_id=?", (text, user_id))
@@ -314,7 +322,7 @@ def handle_message(user_id, text, payload):
         p = cursor.fetchone()
         if p:
             p_from, p_to, p_seats, p_day, p_time, p_phone = p
-            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,?,'active')",
+            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,'active')",
                            (user_id, 'taxi', p_from, p_to, p_seats, p_day, p_time, p_phone))
             oid = cursor.lastrowid
             conn.commit()
@@ -340,26 +348,34 @@ def handle_message(user_id, text, payload):
             return
         cursor.execute("UPDATE passengers SET point_to=?, step='pkg_desc' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "Что везём? (Напишите кратко: документы, запчасти, гостинцы и т.д.):")
+        send_msg(user_id, "Что везём? (Напишите кратко: документы, запчасти, гостинцы и т.д.):", keyboard=None)
 
     elif step == 'pkg_desc':
         cursor.execute("UPDATE passengers SET seats=?, step='pkg_date' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "КОГДА ОТПРАВИТЬ?\nНапишите дату (например: 12.11.2026):")
+        send_msg(user_id, "КОГДА ОТПРАВИТЬ?\nНапишите дату (например: 12.11.2026):", keyboard=None)
 
     elif step == 'pkg_date':
+        if not re.match(r'^\d{2}[\.\s\/]?\d{2}[\.\s\/]?\d{2,4}$', text.strip()):
+            send_msg(user_id, "❌ Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например: 12.11.2026):", keyboard=None)
+            conn.close()
+            return
         cursor.execute("UPDATE passengers SET day=?, step='pkg_time' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 04:55):")
+        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 09:00):", keyboard=None)
 
     elif step == 'pkg_time':
+        if not re.match(r'^\d{1,2}[:.\s]\d{2}$', text.strip()):
+            send_msg(user_id, "❌ Пожалуйста, введите время в формате ЧЧ:ММ (например: 09:00):", keyboard=None)
+            conn.close()
+            return
         cursor.execute("UPDATE passengers SET time=?, step='pkg_phone' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА для связи в формате +7XXXXXXXXXX или 8XXXXXXXXXX:")
+        send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА для связи в формате +7XXXXXXXXXX или 8XXXXXXXXXX:", keyboard=None)
 
     elif step == 'pkg_phone':
         if not re.match(r'^(\+7|7|8)\d{10}$', text.replace(" ", "").replace("-", "")):
-            send_msg(user_id, "❌ Неверный формат. Введите номер: +7XXXXXXXXXX или 8XXXXXXXXXX")
+            send_msg(user_id, "❌ Неверный формат. Введите номер: +7XXXXXXXXXX или 8XXXXXXXXXX", keyboard=None)
             conn.close()
             return
         cursor.execute("UPDATE passengers SET phone=?, step='pkg_confirm' WHERE user_id=?", (text, user_id))
