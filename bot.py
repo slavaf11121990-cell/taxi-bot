@@ -19,8 +19,6 @@ CITIES = ["Сибай", "Магнитогорск", "Челябинск", "Ек�
 SEATS = ["1 человек", "2 человека", "3 человека", "4 человека",
          "5 человек", "6 человек", "7 человек", "8 человек",
          "Легковое такси", "Минивэн"]
-DAYS = ["Сегодня", "Завтра", "Послезавтра"]
-TIMES = ["09:00-11:00", "12:00-14:00", "15:00-17:00", "18:00-21:00", "00:00-02:00", "03:00-06:00"]
 
 def init_db():
     conn = sqlite3.connect("database.db")
@@ -35,8 +33,8 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             order_id INTEGER PRIMARY KEY AUTOINCREMENT, passenger_id INTEGER,
-            point_from TEXT, point_to TEXT, seats TEXT, day TEXT, time TEXT,
-            phone TEXT, status TEXT, driver_id INTEGER
+            order_type TEXT, point_from TEXT, point_to TEXT, seats TEXT, 
+            day TEXT, time TEXT, phone TEXT, status TEXT, driver_id INTEGER
         )
     """)
     conn.commit()
@@ -47,6 +45,8 @@ init_db()
 def main_kb():
     kb = VkKeyboard(one_time=False)
     kb.add_button("🚕 Заказать такси", color=VkKeyboardColor.PRIMARY)
+    kb.add_line()
+    kb.add_button("📦 Отправить посылку", color=VkKeyboardColor.SECONDARY)
     kb.add_line()
     kb.add_button("🚗 Я водитель", color=VkKeyboardColor.POSITIVE)
     return kb.get_keyboard()
@@ -74,25 +74,6 @@ def seats_kb():
     kb.add_line()
     kb.add_button("Легковое такси", color=VkKeyboardColor.PRIMARY)
     kb.add_button("Минивэн", color=VkKeyboardColor.PRIMARY)
-    return kb.get_keyboard()
-
-def day_kb():
-    kb = VkKeyboard(one_time=False)
-    kb.add_button("Сегодня", color=VkKeyboardColor.SECONDARY)
-    kb.add_button("Завтра", color=VkKeyboardColor.SECONDARY)
-    kb.add_button("Послезавтра", color=VkKeyboardColor.SECONDARY)
-    return kb.get_keyboard()
-
-def time_kb():
-    kb = VkKeyboard(one_time=False)
-    kb.add_button("09:00-11:00", color=VkKeyboardColor.SECONDARY)
-    kb.add_button("12:00-14:00", color=VkKeyboardColor.SECONDARY)
-    kb.add_line()
-    kb.add_button("15:00-17:00", color=VkKeyboardColor.SECONDARY)
-    kb.add_button("18:00-21:00", color=VkKeyboardColor.SECONDARY)
-    kb.add_line()
-    kb.add_button("00:00-02:00", color=VkKeyboardColor.SECONDARY)
-    kb.add_button("03:00-06:00", color=VkKeyboardColor.SECONDARY)
     return kb.get_keyboard()
 
 def confirm_kb():
@@ -125,15 +106,23 @@ def send_msg(user_id, text, keyboard=None):
     vk.messages.send(user_id=user_id, message=text, random_id=get_random_id(), keyboard=keyboard)
 
 def broadcast_order(cursor, order_id):
-    cursor.execute("SELECT point_from, point_to, seats, day, time FROM orders WHERE order_id = ?", (order_id,))
+    cursor.execute("SELECT order_type, point_from, point_to, seats, day, time FROM orders WHERE order_id = ?", (order_id,))
     o = cursor.fetchone()
     if not o:
         return
-    p_from, p_to, p_seats, p_day, p_time = o
-    order_text = (f"📢 НОВЫЙ ЗАКАЗ №{order_id}!\n\n"
-                  f"📍 Откуда: {p_from}\n🎯 Куда: {p_to}\n"
-                  f"👥 Детали: {p_seats}\n📅 День: {p_day}\n🕐 Время: {p_time}\n\n"
-                  f"⚠️ Номер телефона будет доступен после нажатия кнопки!")
+    o_type, p_from, p_to, p_seats, p_day, p_time = o
+    
+    if o_type == 'package':
+        order_text = (f"📦 НОВАЯ ПОСЫЛКА №{order_id}!\n\n"
+                      f"📍 Откуда: {p_from}\n🎯 Куда: {p_to}\n"
+                      f"📦 Что везём: {p_seats}\n📅 Когда: {p_day} {p_time}\n\n"
+                      f"⚠️ Номер телефона будет доступен после нажатия кнопки!")
+    else:
+        order_text = (f"📢 НОВЫЙ ЗАКАЗ №{order_id}!\n\n"
+                      f"📍 Откуда: {p_from}\n🎯 Куда: {p_to}\n"
+                      f"👥 Детали: {p_seats}\n📅 Когда: {p_day} {p_time}\n\n"
+                      f"⚠️ Номер телефона будет доступен после нажатия кнопки!")
+                      
     cursor.execute("SELECT user_id FROM drivers")
     for d in cursor.fetchall():
         try:
@@ -150,23 +139,34 @@ def handle_message(user_id, text, payload):
         oid = payload.get("order_id")
 
         if ptype == "take_order":
-            cursor.execute("SELECT passenger_id, point_from, point_to, phone, status, driver_id FROM orders WHERE order_id = ?", (oid,))
+            cursor.execute("SELECT passenger_id, order_type, point_from, point_to, phone, status, driver_id FROM orders WHERE order_id = ?", (oid,))
             o = cursor.fetchone()
             if o:
-                p_id, p_from, p_to, p_phone, status, cur_drv = o
+                p_id, o_type, p_from, p_to, p_phone, status, cur_drv = o
                 if status == "active":
                     cursor.execute("UPDATE orders SET status='taken', driver_id=? WHERE order_id=?", (user_id, oid))
                     conn.commit()
-                    send_msg(user_id,
-                             f"✅ Вы взяли заказ №{oid}!\n\n"
-                             f"📍 {p_from} -> {p_to}\n"
-                             f"📱 ТЕЛЕФОН: {p_phone}\n\n"
-                             f"⚠️ Позвоните пассажиру в течение 10 минут!",
-                             driver_actions_kb(oid))
-                    send_msg(p_id,
-                             "🚕 Водитель принял заказ! Ожидайте звонка в течение 10 минут. "
-                             "Если не позвонит — нажмите «⚠️ Водитель не позвонил».",
-                             passenger_actions_kb(oid))
+                    
+                    if o_type == 'package':
+                        send_msg(user_id,
+                                 f"✅ Вы взяли посылку №{oid}!\n\n"
+                                 f"📍 {p_from} -> {p_to}\n"
+                                 f"📱 ТЕЛЕФОН: {p_phone}\n\n"
+                                 f"⚠️ Свяжитесь с отправителем в течение 10 минут!",
+                                 driver_actions_kb(oid))
+                        send_msg(p_id,
+                                 "🚕 Водитель принял вашу посылку! Ожидайте звонка в течение 10 минут.",
+                                 passenger_actions_kb(oid))
+                    else:
+                        send_msg(user_id,
+                                 f"✅ Вы взяли заказ №{oid}!\n\n"
+                                 f"📍 {p_from} -> {p_to}\n"
+                                 f"📱 ТЕЛЕФОН: {p_phone}\n\n"
+                                 f"⚠️ Позвоните пассажиру в течение 10 минут!",
+                                 driver_actions_kb(oid))
+                        send_msg(p_id,
+                                 "🚕 Водитель принял заказ! Ожидайте звонка в течение 10 минут.",
+                                 passenger_actions_kb(oid))
                 elif cur_drv == user_id:
                     send_msg(user_id, "Вы уже взяли этот заказ.")
                 else:
@@ -182,7 +182,7 @@ def handle_message(user_id, text, payload):
                 if p_id == user_id:
                     cursor.execute("UPDATE orders SET status='cancelled' WHERE order_id=?", (oid,))
                     conn.commit()
-                    send_msg(user_id, "❌ Вы отменили поездку.", main_kb())
+                    send_msg(user_id, "❌ Вы отменили заказ.", main_kb())
                     if d_id:
                         send_msg(d_id, f"❌ Пассажир отменил заказ №{oid}.")
             conn.close()
@@ -249,6 +249,14 @@ def handle_message(user_id, text, payload):
         conn.close()
         return
 
+    if text == "📦 Отправить посылку":
+        cursor.execute("INSERT OR REPLACE INTO passengers (user_id, step) VALUES (?, 'pkg_from')", (user_id,))
+        conn.commit()
+        send_msg(user_id, "Откуда отправить посылку?", cities_kb())
+        conn.close()
+        return
+
+    # === ВЕТКА ТАКСИ ===
     if step == 'get_from':
         if text not in CITIES:
             send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
@@ -280,22 +288,14 @@ def handle_message(user_id, text, payload):
             return
         cursor.execute("UPDATE passengers SET seats=?, step='get_day' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "КОГДА ВЫ ХОТИТЕ ПОЕХАТЬ?", day_kb())
+        send_msg(user_id, "КОГДА ВЫ ХОТИТЕ ПОЕХАТЬ?\nНапишите дату (например: 12.11.2026):")
 
     elif step == 'get_day':
-        if text not in DAYS:
-            send_msg(user_id, "Пожалуйста, выберите из кнопок:", day_kb())
-            conn.close()
-            return
         cursor.execute("UPDATE passengers SET day=?, step='get_time' WHERE user_id=?", (text, user_id))
         conn.commit()
-        send_msg(user_id, "ВО СКОЛЬКО?", time_kb())
+        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 04:55):")
 
     elif step == 'get_time':
-        if text not in TIMES:
-            send_msg(user_id, "Пожалуйста, выберите интервал из кнопок:", time_kb())
-            conn.close()
-            return
         cursor.execute("UPDATE passengers SET time=?, step='get_phone' WHERE user_id=?", (text, user_id))
         conn.commit()
         send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА в формате +7XXXXXXXXXX или 8XXXXXXXXXX:")
@@ -314,8 +314,8 @@ def handle_message(user_id, text, payload):
         p = cursor.fetchone()
         if p:
             p_from, p_to, p_seats, p_day, p_time, p_phone = p
-            cursor.execute("INSERT INTO orders (passenger_id, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,'active')",
-                           (user_id, p_from, p_to, p_seats, p_day, p_time, p_phone))
+            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,?,'active')",
+                           (user_id, 'taxi', p_from, p_to, p_seats, p_day, p_time, p_phone))
             oid = cursor.lastrowid
             conn.commit()
             send_msg(user_id, "🎉 Заказ отправлен водителям! Ждите звонка.", main_kb())
@@ -323,6 +323,64 @@ def handle_message(user_id, text, payload):
         cursor.execute("UPDATE passengers SET step='main_menu' WHERE user_id=?", (user_id,))
         conn.commit()
 
+    # === ВЕТКА ПОСЫЛКИ ===
+    elif step == 'pkg_from':
+        if text not in CITIES:
+            send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
+            conn.close()
+            return
+        cursor.execute("UPDATE passengers SET point_from=?, step='pkg_to' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, "Куда отправить посылку?", cities_kb())
+
+    elif step == 'pkg_to':
+        if text not in CITIES:
+            send_msg(user_id, "Пожалуйста, выберите город из кнопок:", cities_kb())
+            conn.close()
+            return
+        cursor.execute("UPDATE passengers SET point_to=?, step='pkg_desc' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, "Что везём? (Напишите кратко: документы, запчасти, гостинцы и т.д.):")
+
+    elif step == 'pkg_desc':
+        cursor.execute("UPDATE passengers SET seats=?, step='pkg_date' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, "КОГДА ОТПРАВИТЬ?\nНапишите дату (например: 12.11.2026):")
+
+    elif step == 'pkg_date':
+        cursor.execute("UPDATE passengers SET day=?, step='pkg_time' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, "ВО СКОЛЬКО?\nНапишите время (например: 04:55):")
+
+    elif step == 'pkg_time':
+        cursor.execute("UPDATE passengers SET time=?, step='pkg_phone' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, "ВВЕДИТЕ НОМЕР ТЕЛЕФОНА для связи в формате +7XXXXXXXXXX или 8XXXXXXXXXX:")
+
+    elif step == 'pkg_phone':
+        if not re.match(r'^(\+7|7|8)\d{10}$', text.replace(" ", "").replace("-", "")):
+            send_msg(user_id, "❌ Неверный формат. Введите номер: +7XXXXXXXXXX или 8XXXXXXXXXX")
+            conn.close()
+            return
+        cursor.execute("UPDATE passengers SET phone=?, step='pkg_confirm' WHERE user_id=?", (text, user_id))
+        conn.commit()
+        send_msg(user_id, f"Ваш номер: {text}\nВсё верно?", confirm_kb())
+
+    elif step == 'pkg_confirm' and text == "✅ НОМЕР ВЕРНЫЙ":
+        cursor.execute("SELECT point_from, point_to, seats, day, time, phone FROM passengers WHERE user_id=?", (user_id,))
+        p = cursor.fetchone()
+        if p:
+            p_from, p_to, p_desc, p_day, p_time, p_phone = p
+            cursor.execute("INSERT INTO orders (passenger_id, order_type, point_from, point_to, seats, day, time, phone, status) VALUES (?,?,?,?,?,?,?,?,'active')",
+                           (user_id, 'package', p_from, p_to, p_desc, p_day, p_time, p_phone))
+            oid = cursor.lastrowid
+            conn.commit()
+            send_msg(user_id, "🎉 Заявка на посылку отправлена водителям!", main_kb())
+            broadcast_order(cursor, oid)
+        cursor.execute("UPDATE passengers SET step='main_menu' WHERE user_id=?", (user_id,))
+        conn.commit()
+
+    # === ЖАЛОБА ===
     elif step == 'complaint':
         send_msg(ADMIN_ID, f"📩 ЖАЛОБА от {user_id}:\n\n{text}")
         send_msg(user_id, "✅ Спасибо! Жалоба отправлена администратору.", main_kb())
